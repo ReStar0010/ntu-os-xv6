@@ -32,6 +32,7 @@ void
 fileinit(void)
 {
   debug("[FILE] fileinit\n"); // example of using debug, you can modify this
+  file_cache = kmem_cache_create("file", sizeof(struct file));
   initlock(&ftable.lock, "ftable");
 }
 
@@ -39,19 +40,24 @@ fileinit(void)
 struct file*
 filealloc(void)
 {
+  acquire(&ftable.lock);
   debug("[FILE] filealloc\n"); // example of using debug, you can modify this
   struct file *f;
-
-  acquire(&ftable.lock);
-  for(f = ftable.file; f < ftable.file + NFILE; f++){
-    if(f->ref == 0){
-      f->ref = 1;
-      release(&ftable.lock);
-      return f;
-    }
-  }
+  f = (struct file *)kmem_cache_alloc(file_cache);
+  if(f->ref == 0)
+    f->ref = 1;
   release(&ftable.lock);
+  if(f != NULL)
+    return f;
   return 0;
+  // for(f = ftable.file; f < ftable.file + NFILE; f++){
+  //   if(f->ref == 0){
+  //     f->ref = 1;
+  //     release(&ftable.lock);
+  //     return f;
+  //   }
+  // }
+  // return 0;
 }
 
 // Increment ref count for file f.
@@ -83,6 +89,7 @@ fileclose(struct file *f)
   ff = *f;
   f->ref = 0;
   f->type = FD_NONE;
+  kmem_cache_free(file_cache, f);
   release(&ftable.lock);
 
   if(ff.type == FD_PIPE){

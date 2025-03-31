@@ -7,6 +7,7 @@
 #include "syscall.h"
 #include "defs.h"
 #include "debug.h"
+#include "slab.h"
 
 // Fetch the uint64 at addr from the current process.
 int
@@ -128,6 +129,7 @@ static uint64 (*syscalls[])(void) = {
 [SYS_mkdir]   sys_mkdir,
 [SYS_close]   sys_close,
 [SYS_debugswitch]  sys_debugswitch,
+[SYS_printfslab] sys_printfslab,
 };
 
 void

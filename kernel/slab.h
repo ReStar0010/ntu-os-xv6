@@ -1,11 +1,12 @@
 #pragma once
 
+#include "list.h"
 #include "spinlock.h"
 #include "types.h"
 
-// struct run {
-//   struct run *next;
-// };
+struct run {
+  struct run *next;
+};
 
 /**
  * struct slab - Represents a slab in the slab allocator.
@@ -13,16 +14,9 @@
  */
 struct slab
 {
-  // TODO: Choose the type of freelist from
-  //    1. void **
-  //    2. struct run *
-  // <ptr> freelist;             // Linked list of free objects
-
-  // TODO: Design how to link the slabs
-  // ...
-
-  // TODO: you can add other members
-  // ...
+  struct list_head list; 
+  int in_use;
+  struct run *freelist;
 };
 
 /**
@@ -38,9 +32,11 @@ struct kmem_cache
   struct spinlock lock; // Lock for cache management
 
   // TODO: Add slab list(s)
-  // <TYPE> full     // Completely allocated slabs (Optional)
-  // <TYPE> partial  // Partially allocated slabs
-  // <TYPE> free     // Free slabs (Optional)
+  struct list_head full; int full_num;
+  struct list_head partial; int partial_num;
+  struct list_head free; int free_num;
+  int in_cache_object;
+  
 };
 
 /**
@@ -79,3 +75,5 @@ void kmem_cache_free(struct kmem_cache *cache, void *obj);
  * @print_fn: Function to print each object in the cache. If NULL (0) is given, will skip object printing part.
  */
 void print_kmem_cache(struct kmem_cache *cache, void (*print_fn)(void *));
+
+uint64 sys_printfslab(void);
