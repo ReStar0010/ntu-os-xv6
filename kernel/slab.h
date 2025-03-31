@@ -36,7 +36,8 @@ struct kmem_cache
   struct list_head partial; int partial_num;
   struct list_head free; int free_num;
   int in_cache_object;
-  
+  int cache_in_use;
+  struct run *freelist;
 };
 
 /**

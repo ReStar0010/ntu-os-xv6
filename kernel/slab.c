@@ -11,7 +11,6 @@
 #define PAGE_SIZE 4096
 
 uint64 sys_printfslab(void){
-  
   print_kmem_cache(file_cache, fileprint_metadata);
   return 0;
 }
@@ -19,12 +18,23 @@ uint64 sys_printfslab(void){
 void print_kmem_cache(struct kmem_cache *cache, void (*slab_obj_printer)(void *))
 {
   // TODO: Implement print_kmem_cache
+  // TODO: Implement In_cache print
   acquire(&cache->lock);
   printf("[SLAB] kmem_cache { name: %s, object_size: %d, at: %p, in_cache_obj: %d }\n", cache->name, cache->object_size, cache, cache->in_cache_object);
   if(cache->in_cache_object != 0){
-    return;
+    printf("[SLAB]  [ cache slabs ]\n");
+    printf("[SLAB]    [ slab %p ] { freelist: %p, nxt: %p }\n", cache, cache->freelist, NULL);
+    int object_num = (PAGE_SIZE - sizeof(struct kmem_cache)) / cache->object_size;
+    void *cache_freelist = (void *)((char *)cache + sizeof(struct kmem_cache));
+    for(int i=0;i<object_num;i++){
+      void *object_addr = (void *)(((char *)cache_freelist) + (cache->object_size * i));
+      struct run * ptr = (struct run *)object_addr;
+      printf("[SLAB]      [ idx %d ] { addr: %p, as_ptr: %p, as_obj: { ", i, ptr, ptr->next);
+      slab_obj_printer(object_addr);
+      printf(" } }\n");
+    }
   }
-  else{
+  if(!list_empty(&cache->partial)){
     printf("[SLAB]  [ partial slabs ]\n");
     struct slab *entry;
     int object_num = (PAGE_SIZE - sizeof(struct slab)) / cache->object_size;
@@ -42,8 +52,8 @@ void print_kmem_cache(struct kmem_cache *cache, void (*slab_obj_printer)(void *)
         printf(" } }\n");
       }
     }
-    printf("[SLAB] print_kmem_cache end\n");
   }
+  printf("[SLAB] print_kmem_cache end\n");
   release(&cache->lock);
 }
 
@@ -54,10 +64,11 @@ struct kmem_cache *kmem_cache_create(char *name, uint object_size)
   initlock(&cache->lock, cache->name);
   strncpy(cache->name, name, sizeof(cache->name));
   cache->object_size = object_size;
-  cache->in_cache_object = 0;
+  cache->in_cache_object = (PAGE_SIZE - sizeof(struct kmem_cache)) / object_size;
   cache->full_num = 0;
   cache->partial_num = 0;
   cache->free_num = 0;
+  cache->cache_in_use = -1;
   INIT_LIST_HEAD(&cache->free);
   INIT_LIST_HEAD(&cache->partial);
   INIT_LIST_HEAD(&cache->full);
@@ -79,7 +90,21 @@ void *kmem_cache_alloc(struct kmem_cache *cache)
   //TODO: Implement kmem_cache_alloc  
   acquire(&cache->lock); // acquire the lock before modification
   printf("[SLAB] Alloc request on cache %s\n", cache->name);
-  if(cache->in_cache_object == 0){
+  if(cache->cache_in_use == -1){
+    //*NOTE - Init in cache slab
+    int meta_size = sizeof(struct kmem_cache);
+    char *obj_start_add = ((char *)cache + meta_size);
+    for(int i=0;i<cache->in_cache_object-1;i++){
+      struct run *cur = (struct run *)(obj_start_add + i*cache->object_size);
+      struct run *next = (struct run *)(obj_start_add + (i+1)*cache->object_size);
+      cur->next = next;
+    }
+    struct run *tail = (struct run *)(obj_start_add + (cache->in_cache_object - 1)*cache->object_size);
+    tail->next = NULL;
+    cache->freelist = (struct run *)obj_start_add;
+    cache->cache_in_use = 0;
+  }
+  if(cache->cache_in_use == cache->in_cache_object){
     if(list_empty(&cache->partial)){ //*NOTE - partial is empty
       if(list_empty(&cache->free)){ //*NOTE -  free is empty
           //* create new slab
@@ -144,6 +169,15 @@ void *kmem_cache_alloc(struct kmem_cache *cache)
       return (void *)r;
     }
   }
+  else{
+    //*NOTE - alloc from in cache
+    struct run *r = cache->freelist;
+    cache->freelist = cache->freelist->next;
+    cache->cache_in_use++;
+    printf("[SLAB] Object %p in slab %p (%s) is allocated and initialized\n", r, cache, cache->name);
+    release(&cache->lock);
+    return (void *)r;
+  }
   release(&cache->lock); // release the lock before return
   return 0;
 }
@@ -159,35 +193,46 @@ void kmem_cache_free(struct kmem_cache *cache, void *obj)
   struct slab *entry;
   entry = (struct slab *)get_slab_from_obj(obj);
   printf("[SLAB] Free %p in slab %p (%s)\n", obj, entry, cache->name);  
-  // NOTE: put the obj into slab's freelist
-  struct run *prev = entry->freelist;
-  entry->freelist = (struct run *)obj;
-  entry->freelist->next = prev;
-  //*NOTE - check inuse
-  int object_nums = (PAGE_SIZE - sizeof(struct slab)) / cache->object_size;
-  int in_free_slab = 0;
-  entry->in_use--;
-  if(entry->in_use == 0){ //*NOTE - move from partial to free
-    list_del(&entry->list);
-    list_add(&entry->list, &cache->free); 
-    cache->partial_num--; cache->free_num++;
-    in_free_slab = 1;
+  if((void *)entry == (void *)cache){
+    //*NOTE - entry is cache
+    struct run *prev = cache->freelist;
+    cache->freelist = (struct run *)obj;
+    cache->freelist->next = prev;
+    cache->cache_in_use--;
+    printf("[SLAB] End of free\n");
+    release(&cache->lock); // release the lock before return
   }
   else{
-    if(entry->in_use == object_nums - 1){ //*NOTE - move from full to partial
+    // NOTE: put the obj into slab's freelist
+    struct run *prev = entry->freelist;
+    entry->freelist = (struct run *)obj;
+    entry->freelist->next = prev;
+    //*NOTE - check inuse
+    int object_nums = (PAGE_SIZE - sizeof(struct slab)) / cache->object_size;
+    int in_free_slab = 0;
+    entry->in_use--;
+    if(entry->in_use == 0){ //*NOTE - move from partial to free
       list_del(&entry->list);
-      list_add(&entry->list, &cache->partial);
-      cache->full_num--; cache->partial_num++;
+      list_add(&entry->list, &cache->free); 
+      cache->partial_num--; cache->free_num++;
+      in_free_slab = 1;
     }
+    else{
+      if(entry->in_use == object_nums - 1){ //*NOTE - move from full to partial
+        list_del(&entry->list);
+        list_add(&entry->list, &cache->partial);
+        cache->full_num--; cache->partial_num++;
+      }
+    }
+    //*NOTE - check MP2_MIN
+    if(in_free_slab && (cache->free_num + cache->partial_num) > MP2_MIN_AVAIL_SLAB){
+      // *NOTE - restore the current free slab
+      printf("[SLAB] slab %p (%s) is freed due to save memory\n", entry, cache->name);
+      list_del(&entry->list);
+      cache->free_num--;
+      kfree((void *)entry);
+    }
+    printf("[SLAB] End of free\n");
+    release(&cache->lock); // release the lock before return
   }
-  //*NOTE - check MP2_MIN
-  if(in_free_slab && (cache->free_num + cache->partial_num) > MP2_MIN_AVAIL_SLAB){
-    // *NOTE - restore the current free slab
-    printf("[SLAB] slab %p (%s) is freed due to save memory\n", entry, cache->name);
-    list_del(&entry->list);
-    cache->free_num--;
-    kfree((void *)entry);
-  }
-  printf("[SLAB] End of free\n");
-  release(&cache->lock); // release the lock before return
 }
