@@ -116,7 +116,6 @@ void *kmem_cache_alloc(struct kmem_cache *cache)
           size_t meta_size = sizeof(struct slab);
           char *obj_start_addr = ((char *)new_slab) + meta_size; // inital freelist object
           int obj_num = (PAGE_SIZE - meta_size) / cache->object_size; // calculate object nums
-          new_slab->in_use = 0;
           for(int i=0;i<obj_num-1;i++){ // initial free list
             struct run *cur = (struct run *)(obj_start_addr + i*cache->object_size);
             struct run *next = (struct run *)(obj_start_addr + (i+1)*cache->object_size);
@@ -128,12 +127,15 @@ void *kmem_cache_alloc(struct kmem_cache *cache)
           list_add(&new_slab->list, &cache->partial); //*NOTE - move the slab into partial
           //* return the object
           new_slab->freelist = (struct run *)obj_start_addr; // freelist complete
+          new_slab->freelist->in_use = 0;
+          //* save the in_use
+          int in_use = new_slab->freelist->in_use + 1;
           struct run *r = new_slab->freelist;
           new_slab->freelist  = new_slab->freelist->next;
+          new_slab->freelist->in_use = in_use;
           printf("[SLAB] Object %p in slab %p (%s) is allocated and initialized\n", r, new_slab, cache->name);
           //* maintain partial_num
           cache->partial_num++;
-          new_slab->in_use++;
           release(&cache->lock); // release the lock before return
           return (void *)r;
       }
@@ -142,9 +144,10 @@ void *kmem_cache_alloc(struct kmem_cache *cache)
         list_add(&to_partial_slab->list, &cache->partial);
         list_del(&to_partial_slab->list);
         // *NOTE - move to partial
-        to_partial_slab->in_use++;
+        int in_use = to_partial_slab->freelist->in_use + 1;
         struct run *r = to_partial_slab->freelist;
         to_partial_slab->freelist = to_partial_slab->freelist->next;
+        to_partial_slab->freelist->in_use = in_use;
         printf("[SLAB] Object %p in slab %p (%s) is allocated and initialized\n", r, to_partial_slab, cache->name);
         //* maintain partial_num free_num
         cache->free_num--; cache->partial_num++;
@@ -156,14 +159,16 @@ void *kmem_cache_alloc(struct kmem_cache *cache)
       struct slab * partial_slab = list_first_entry(&cache->partial, struct slab, list);
       int meta_size = sizeof(struct slab);
       int obj_nums = (PAGE_SIZE - meta_size) / cache->object_size; // calculate object nums
-      partial_slab->in_use++; 
-      if(partial_slab->in_use == obj_nums){ // move the slab into full
+      int in_use = partial_slab->freelist->in_use + 1;
+      if(in_use == obj_nums){ // move the slab into full
         list_del(&partial_slab->list);
         list_add(&partial_slab->list, &cache->full);
         cache->full_num++; cache->partial_num--;
       }
       struct run *r = partial_slab->freelist;
       partial_slab->freelist = partial_slab->freelist->next; //*NOTE - point to NULL
+      if(partial_slab->freelist != NULL)
+        partial_slab->freelist->in_use = in_use;
       printf("[SLAB] Object %p in slab %p (%s) is allocated and initialized\n", r, partial_slab, cache->name);
       release(&cache->lock); // release the lock before return
       return (void *)r;
@@ -204,21 +209,26 @@ void kmem_cache_free(struct kmem_cache *cache, void *obj)
   }
   else{
     // NOTE: put the obj into slab's freelist
+    int object_nums = (PAGE_SIZE - sizeof(struct slab)) / cache->object_size;
     struct run *prev = entry->freelist;
+    int in_use;
+    if(prev == NULL)
+      in_use = object_nums - 1;
+    else
+      in_use = prev->in_use - 1;
     entry->freelist = (struct run *)obj;
     entry->freelist->next = prev;
+    entry->freelist->in_use = in_use;
     //*NOTE - check inuse
-    int object_nums = (PAGE_SIZE - sizeof(struct slab)) / cache->object_size;
     int in_free_slab = 0;
-    entry->in_use--;
-    if(entry->in_use == 0){ //*NOTE - move from partial to free
+    if(entry->freelist->in_use == 0){ //*NOTE - move from partial to free
       list_del(&entry->list);
       list_add(&entry->list, &cache->free); 
       cache->partial_num--; cache->free_num++;
       in_free_slab = 1;
     }
     else{
-      if(entry->in_use == object_nums - 1){ //*NOTE - move from full to partial
+      if(entry->freelist->in_use == object_nums - 1){ //*NOTE - move from full to partial
         list_del(&entry->list);
         list_add(&entry->list, &cache->partial);
         cache->full_num--; cache->partial_num++;

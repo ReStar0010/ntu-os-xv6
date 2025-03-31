@@ -6,6 +6,7 @@
 
 struct run {
   struct run *next;
+  int in_use;
 };
 
 /**
@@ -15,7 +16,6 @@ struct run {
 struct slab
 {
   struct list_head list; 
-  int in_use;
   struct run *freelist;
 };
 
