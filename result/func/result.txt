@@ -1,0 +1,4 @@
+Case 7 is partially passed, score: 2.85
+Case 8 is partially passed, score: 2.85
+Case 9 is partially passed, score: 2.85
+Case 10 is partially passed, score: 2.85

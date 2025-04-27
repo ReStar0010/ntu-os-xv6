@@ -1,0 +1,5 @@
+== Test public/mp2-10 (3%) ==
+public/mp2-10: FAIL (0/3) (6.1s) 
+    Invalid max_objs: set to 8 but is actually 7, you should print all the objects in slab, including those allocaed
+    QEMU output saved to out/public/mp2-10.out.failed
+Score: 0/3

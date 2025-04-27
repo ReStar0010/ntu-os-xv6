@@ -1,0 +1,90 @@
+== Test public/mp2-7 (3%) ==
+public/mp2-7: FAIL (0/3) (5.3s) 
+    Invalid objs in slab 2281017344: freelist 2281020520 structure broken [
+        {
+            "addr": 2281017496,
+            "as_ptr": 64424509443,
+            "as_obj": {
+                "tp": 3,
+                "ref": 15,
+                "readable": 1,
+                "writable": 1,
+                "pipe": 361700864190383365,
+                "ip": 2147701752,
+                "off": 84215045,
+                "major": 1
+            }
+        },
+        {
+            "addr": 2281018000,
+            "as_ptr": 8589934593,
+            "as_obj": {
+                "tp": 1,
+                "ref": 2,
+                "readable": 1,
+                "writable": 0,
+                "pipe": 2280804352,
+                "ip": 2147701752,
+                "off": 84215045,
+                "major": 1
+            }
+        },
+        {
+            "addr": 2281018504,
+            "as_ptr": 4294967298,
+            "as_obj": {
+                "tp": 2,
+                "ref": 1,
+                "readable": 0,
+                "writable": 1,
+                "pipe": 2280804352,
+                "ip": 2147701888,
+                "off": 0,
+                "major": 1285
+            }
+        },
+        {
+            "addr": 2281019008,
+            "as_ptr": 4294967297,
+            "as_obj": {
+                "tp": 1,
+                "ref": 1,
+                "readable": 1,
+                "writable": 0,
+                "pipe": 2280566784,
+                "ip": 361700864190383365,
+                "off": 84215045,
+                "major": 1285
+            }
+        },
+        {
+            "addr": 2281019512,
+            "as_ptr": 4294967297,
+            "as_obj": {
+                "tp": 1,
+                "ref": 1,
+                "readable": 0,
+                "writable": 1,
+                "pipe": 2280566784,
+                "ip": 361700864190383365,
+                "off": 84215045,
+                "major": 1285
+            }
+        },
+        {
+            "addr": 2281020016,
+            "as_ptr": 4294967297,
+            "as_obj": {
+                "tp": 1,
+                "ref": 1,
+                "readable": 1,
+                "writable": 0,
+                "pipe": 2280308736,
+                "ip": 361700864190383365,
+                "off": 84215045,
+                "major": 1285
+            }
+        }
+    ]
+    QEMU output saved to out/public/mp2-7.out.failed
+Score: 0/3

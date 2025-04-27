@@ -1,0 +1,5 @@
+== Test private/mp2-2 (5%) ==
+private/mp2-2: FAIL (0/5) (8.1s) 
+    Invalid xv6 state <panic: kerneltrap>, remained debug message to parse: [SlabAllocRequestData(origin='Alloc request on cache file', name='file')]
+    QEMU output saved to out/private/mp2-2.out.failed
+Score: 0/5
